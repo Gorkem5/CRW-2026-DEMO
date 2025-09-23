@@ -3,8 +3,10 @@ package frc.robot.drivetrain;
 import com.studica.frc.AHRS;
 import com.studica.frc.AHRS.NavXComType;
 
+import edu.wpi.first.math.MathUtil; 
 import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.kinematics.*;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -55,6 +57,12 @@ public class SwerveSubsystem extends SubsystemBase {
     }
 
     private void executeDrive() {
+        SmartDashboard.putNumber("xSpd", xSpd);
+        SmartDashboard.putNumber("ySpd", ySpd);
+        SmartDashboard.putNumber("reqX", driveReq.getX());
+        SmartDashboard.putNumber("reqY", driveReq.getY());
+        SmartDashboard.putNumber("reqRot", driveReq.getZ());
+        
         double now = Timer.getFPGATimestamp();
         double dt = now - lastTime;
         lastTime = now;
@@ -121,8 +129,28 @@ public class SwerveSubsystem extends SubsystemBase {
 
     private void updateOdometry() {
         heading = Rotation2d.fromDegrees(-gyro.getFusedHeading());
-        odometry.update(heading, positions);
-        currentPose = odometry.getPoseMeters();
+    
+        boolean useFake = DriveConstants.FAKE_ODOM || RobotBase.isSimulation();
+    
+        if (useFake) {
+            final double dt = 0.02;
+            double dx = xSpd * dt;
+            double dy = ySpd * dt;
+    
+            // tersse çevir
+            currentPose = new Pose2d(
+                currentPose.getX() + dx,
+                currentPose.getY() + dy,
+                heading
+            );
+    
+            if (positions != null && positions.length == 4) {
+                odometry.resetPosition(heading, positions, currentPose);
+            }
+        } else {
+            odometry.update(heading, positions);
+            currentPose = odometry.getPoseMeters();
+        }
     }
 
     private void updateDashboard() {

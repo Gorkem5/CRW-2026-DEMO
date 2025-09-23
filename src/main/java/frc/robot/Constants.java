@@ -14,6 +14,8 @@ public final class Constants {
     public static final double JOYDeadzone_Y = 0.1;
     public static final double JOYDeadzone_Rot = 0.1;
 
+    public static final boolean FAKE_ODOM = true ;
+
 }
 
 public static class SwerveConstants {

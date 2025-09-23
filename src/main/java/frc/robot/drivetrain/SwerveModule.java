@@ -6,118 +6,144 @@ import com.revrobotics.spark.SparkMax;
 import com.revrobotics.spark.SparkBase.ControlType;
 import com.revrobotics.spark.SparkBase.PersistMode;
 import com.revrobotics.spark.SparkBase.ResetMode;
-import com.revrobotics.spark.config.SparkMaxConfig;
 import com.revrobotics.spark.config.SparkBaseConfig.IdleMode;
+import com.revrobotics.spark.config.SparkMaxConfig;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.wpilibj.RobotBase;
 
 import frc.robot.Constants.SwerveConstants;
 
 public class SwerveModule {
 
-    private SparkMax angleMotor;
-    private SparkMax driveMotor;
+    private SparkMax angleSpark;
+    private SparkMax driveSpark;
 
-    private RelativeEncoder angleEnc;
-    private RelativeEncoder driveEnc;
+    private RelativeEncoder angleEncoder;
+    private RelativeEncoder driveEncoder;
 
-    private SparkClosedLoopController anglePID;
-    private SparkClosedLoopController drivePID;
+    private SparkClosedLoopController angleController;
+    private SparkClosedLoopController driveController;
 
-    private double distDriven = 0.0;
-    private double targetAngleRad = 0.0;
     private boolean inverted = false;
+    private double targetAngleAbsolute = 0.0;
+    private double distanceDriven = 0.0;
 
-    public SwerveModule(int angleId, int driveId) {
-        angleMotor = new SparkMax(angleId, MotorType.kBrushless);
-        driveMotor = new SparkMax(driveId, MotorType.kBrushless);
+    private double simAngleRad = 0.0;
+    private double simTurnRate = Math.toRadians(720.0);
+    private double commandedSpeedMps = 0.0;
+
+    public SwerveModule(int AngleCANID, int DriveCANID) {
+        angleSpark = new SparkMax(AngleCANID, MotorType.kBrushless);
+        driveSpark = new SparkMax(DriveCANID, MotorType.kBrushless);
 
         SparkMaxConfig angleCfg = new SparkMaxConfig();
         SparkMaxConfig driveCfg = new SparkMaxConfig();
 
-        double angleFactor = (2 * Math.PI) / SwerveConstants.GearRatio_Angle;
+        double angleConvFactor = (2.0 * Math.PI) / SwerveConstants.GearRatio_Angle;
 
         angleCfg.closedLoop.pid(SwerveConstants.AnglePID_P, SwerveConstants.AnglePID_I, SwerveConstants.AnglePID_D);
         angleCfg.closedLoop.outputRange(-0.5, 0.5);
-        angleCfg.encoder.positionConversionFactor(angleFactor);
         angleCfg.idleMode(IdleMode.kBrake);
+        angleCfg.encoder.positionConversionFactor(angleConvFactor);
 
         driveCfg.closedLoop.pid(SwerveConstants.DrivePID_P, SwerveConstants.DrivePID_I, SwerveConstants.DrivePID_D);
         driveCfg.idleMode(IdleMode.kCoast);
 
-        angleMotor.configure(angleCfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
-        driveMotor.configure(driveCfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
+        angleSpark.configure(angleCfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
+        driveSpark.configure(driveCfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
 
-        angleEnc = angleMotor.getEncoder();
-        driveEnc = driveMotor.getEncoder();
-
-        anglePID = angleMotor.getClosedLoopController();
-        drivePID = driveMotor.getClosedLoopController();
+        angleEncoder = angleSpark.getEncoder();
+        driveEncoder = driveSpark.getEncoder();
+        angleController = angleSpark.getClosedLoopController();
+        driveController = driveSpark.getClosedLoopController();
     }
 
-    public double getAngleRad() {
-        return angleEnc.getPosition();
-    }
+    private double shortestTo(double currentAngle, double targetAngle) {
+        double curNorm = currentAngle % (2.0 * Math.PI);
+        if (curNorm < 0) curNorm += 2.0 * Math.PI;
 
-    private double findShortestPath(double current, double target) {
-        double curNorm = current % (2 * Math.PI);
-        if (curNorm < 0) curNorm += 2 * Math.PI;
+        double guess = targetAngle + currentAngle - curNorm;
+        double diff  = targetAngle - curNorm;
 
-        double guess = target + (current - curNorm);
-
-        if (target - curNorm > Math.PI) guess -= 2 * Math.PI;
-        if (target - curNorm < -Math.PI) guess += 2 * Math.PI;
+        if (diff > Math.PI)  guess -= 2.0 * Math.PI;
+        if (diff < -Math.PI) guess += 2.0 * Math.PI;
 
         return guess;
     }
 
-    public void setTargetAngle(double deg, boolean forceForward) {
-        double now = getAngleRad();
-        double desired = Math.toRadians(deg);
+    public double GetAngle() {
+        if (RobotBase.isSimulation()) {
+            return simAngleRad;
+        }
+        return angleEncoder.getPosition();
+    }
 
-        double option1 = findShortestPath(now, desired);
-        double option2 = findShortestPath(now, (desired > Math.PI) ? desired - Math.PI : desired + Math.PI);
+    public void SetTargetAngle(double angDeg, boolean forceForward) {
+        double current = GetAngle();
+        double desired = Math.toRadians(angDeg);
 
-        double diff1 = Math.abs(option1 - now);
-        double diff2 = Math.abs(option2 - now);
+        double targetNoFlip   = shortestTo(current, desired);
+        double desiredFlipped = (desired > Math.PI) ? desired - Math.PI : desired + Math.PI;
+        double targetWithFlip = shortestTo(current, desiredFlipped);
 
-        if (!forceForward && diff1 > diff2) {
-            targetAngleRad = option2;
-            inverted = false;
-        } else {
-            targetAngleRad = option1;
-            inverted = true;
+        double errNoFlip = Math.abs(targetNoFlip   - current);
+        double errFlip   = Math.abs(targetWithFlip - current);
+
+        boolean useFlip = (!forceForward) && (errFlip < errNoFlip);
+
+        targetAngleAbsolute = useFlip ? targetWithFlip : targetNoFlip;
+        inverted = useFlip;
+
+        angleController.setReference(targetAngleAbsolute, ControlType.kPosition);
+    }
+
+    public void SetTargetAngle(double angleDegrees) {
+        SetTargetAngle(angleDegrees, false);
+    }
+
+    public void Drive(double speedMps) {
+        SetSpeed(speedMps);
+    }
+
+    public double GetSpeed() {
+        if (RobotBase.isSimulation()) {
+            return (inverted ? -1.0 : 1.0) * commandedSpeedMps;
+        }
+        double rpm = driveEncoder.getVelocity();
+        return rpm / 250.0 / SwerveConstants.SpeedCalibValue;
+    }
+
+    void SetSpeed(double speedMps) {
+        commandedSpeedMps = speedMps;
+        double sign = inverted ? -1.0 : 1.0;
+        double motorVelRef = sign * speedMps * 250.0 * SwerveConstants.SpeedCalibValue;
+        driveController.setReference(motorVelRef, ControlType.kVelocity);
+    }
+
+    public void Update(double deltaTimeSeconds) {
+        if (RobotBase.isSimulation()) {
+            double err = targetAngleAbsolute - simAngleRad;
+            err = ((err + Math.PI) % (2.0 * Math.PI));
+            if (err < 0) err += 2.0 * Math.PI;
+            err -= Math.PI;
+
+            double maxStep = simTurnRate * deltaTimeSeconds;
+            double step = Math.max(-maxStep, Math.min(maxStep, err));
+            simAngleRad += step;
         }
 
-        anglePID.setReference(targetAngleRad, ControlType.kPosition);
+        distanceDriven += GetSpeed() * deltaTimeSeconds;
     }
 
-    public void setTargetAngle(double deg) {
-        setTargetAngle(deg, false);
+    public SwerveModulePosition GetPosition() {
+        return new SwerveModulePosition(distanceDriven, Rotation2d.fromRadians(GetAngle()));
     }
 
-    public void drive(double speedMps) {
-        double adjSpeed = inverted ? -speedMps : speedMps;
-        drivePID.setReference(adjSpeed * 250.0 * SwerveConstants.SpeedCalibValue, ControlType.kVelocity);
-    }
-
-    public double getSpeedMps() {
-        double rpm = driveEnc.getVelocity();
-        return rpm / (250.0 * SwerveConstants.SpeedCalibValue);
-    }
-
-    public void update(double dt) {
-        distDriven += getSpeedMps() * dt;
-    }
-
-    public SwerveModulePosition getPosition() {
-        return new SwerveModulePosition(distDriven, Rotation2d.fromRadians(getAngleRad()));
-    }
-
-    public SwerveModuleState getState() {
-        return new SwerveModuleState(getSpeedMps(), Rotation2d.fromRadians(getAngleRad()));
+    public SwerveModuleState GetState() {
+        return new SwerveModuleState(GetSpeed(), Rotation2d.fromRadians(GetAngle()));
     }
 }

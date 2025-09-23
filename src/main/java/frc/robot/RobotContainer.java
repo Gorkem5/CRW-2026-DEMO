@@ -5,36 +5,39 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj2.command.Command;
-import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandPS4Controller;
-import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.drivetrain.SwerveSubsystem;
 import frc.robot.drivetrain.commands.SwerveJoystickDriveCommand;
-
+import frc.robot.Constants.DriveConstants;
 
 public class RobotContainer {
-  // sub,command define
   private final SwerveSubsystem swerve = new SwerveSubsystem();
 
-  private final CommandPS4Controller m_driverController = new CommandPS4Controller(0);
+  private final CommandPS4Controller driver = new CommandPS4Controller(0);
 
   public RobotContainer() {
-    // Configure the trigger bindings
     configureBindings();
   }
 
   private void configureBindings() {
-    swerve.setDefaultCommand(new SwerveJoystickDriveCommand(
-      swerve,
-      () -> m_driverController.getHID().getLeftX(),
-      () -> m_driverController.getHID().getLeftY(),
-      () -> m_driverController.getHID().getRightX(), 
-      true
-    )); 
+    swerve.setDefaultCommand(
+        new SwerveJoystickDriveCommand(
+            swerve,
+            () -> shape(deadzone(-driver.getHID().getLeftY(),  DriveConstants.JOYDeadzone_Y)) * -1.0,
+            () -> shape(deadzone( driver.getHID().getLeftX(),  DriveConstants.JOYDeadzone_X)),
+            () -> shape(deadzone( driver.getHID().getRawAxis(4), DriveConstants.JOYDeadzone_Rot)),
+            true));
   }
-  
+
+  private static double deadzone(double v, double dz) {
+    return (Math.abs(v) < dz) ? 0.0 : v;
+  }
+
+  private static double shape(double v) {
+    return Math.copySign(v * v, v);
+  }
+
   public Command getAutonomousCommand() {
     return null;
   }
-  
 }

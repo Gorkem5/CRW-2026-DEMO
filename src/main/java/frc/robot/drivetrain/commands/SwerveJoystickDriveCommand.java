@@ -3,6 +3,7 @@ package frc.robot.drivetrain.commands;
 import java.util.function.Supplier;
 
 import edu.wpi.first.math.geometry.Translation3d;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.DriveConstants;
 import frc.robot.drivetrain.SwerveSubsystem;
@@ -34,6 +35,7 @@ public class SwerveJoystickDriveCommand extends Command {
 
     @Override
     public void execute() {
+        SmartDashboard.putNumber("rot_in", rotIn.get());
         double x = xIn.get();
         double y = yIn.get();
         double r = rotIn.get();

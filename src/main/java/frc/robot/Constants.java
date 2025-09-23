@@ -16,6 +16,10 @@ public final class Constants {
 
     public static final boolean FAKE_ODOM = true ;
 
+    public static final double MaxAngularRadPerSec = Math.PI * 2.0;
+
+    public static final double MaxLinearSpeedMps = 3.0;
+
 }
 
 public static class SwerveConstants {

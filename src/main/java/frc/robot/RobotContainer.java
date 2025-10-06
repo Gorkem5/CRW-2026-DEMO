@@ -1,14 +1,12 @@
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+﻿package frc.robot;
 
-package frc.robot;
-
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.button.CommandPS4Controller;
+import frc.robot.Constants.DriveConstants;
 import frc.robot.drivetrain.SwerveSubsystem;
 import frc.robot.drivetrain.commands.SwerveJoystickDriveCommand;
-import frc.robot.Constants.DriveConstants;
 
 public class RobotContainer {
   private final SwerveSubsystem swerve = new SwerveSubsystem();
@@ -27,6 +25,20 @@ public class RobotContainer {
             () -> shape(deadzone( driver.getHID().getLeftX(),  DriveConstants.JOYDeadzone_X)),
             () -> shape(deadzone( driver.getHID().getRawAxis(4), DriveConstants.JOYDeadzone_Rot)),
             true));
+
+    driver.options()
+        .onTrue(new InstantCommand(swerve::toggleFieldRelative, swerve));
+
+    driver.square()
+        .onTrue(new InstantCommand(swerve::quickFlipHeading, swerve));
+
+    driver.triangle()
+        .onTrue(new InstantCommand(
+            () -> swerve.requestHeadingHold(Rotation2d.fromDegrees(0.0)),
+            swerve));
+
+    driver.cross()
+        .onTrue(new InstantCommand(swerve::clearHeadingHold, swerve));
   }
 
   private static double deadzone(double v, double dz) {

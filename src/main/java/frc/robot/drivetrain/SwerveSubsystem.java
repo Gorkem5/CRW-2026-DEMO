@@ -7,7 +7,7 @@ import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
-import edu.wpi.first.math.kinematics.SwerveDriveOdometry;
+import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -51,7 +51,7 @@ public class SwerveSubsystem extends SubsystemBase {
 
     private final SwerveModulePosition[] positions = new SwerveModulePosition[4];
     private final SwerveModuleState[] states = new SwerveModuleState[4];
-    private final SwerveDriveOdometry odometry;
+    private final SwerveDrivePoseEstimator estimator;
 
     private Pose2d currentPose = new Pose2d();
     private Rotation2d simHeading = new Rotation2d();
@@ -61,7 +61,7 @@ public class SwerveSubsystem extends SubsystemBase {
 
     public SwerveSubsystem() {
         refreshModuleMeasurements();
-        odometry = new SwerveDriveOdometry(kinematics, getHeading(), positions);
+        estimator = new SwerveDrivePoseEstimator(kinematics, getHeading(), positions, currentPose);
         fieldVis.setRobotPose(currentPose);
     }
 
@@ -95,7 +95,7 @@ public class SwerveSubsystem extends SubsystemBase {
     }
 
     public void resetPose(Pose2d pose) {
-        odometry.resetPosition(getHeading(), positions, pose);
+        estimator.resetPosition(getHeading(), positions, pose);
         currentPose = pose;
         if (RobotBase.isSimulation()) {
             simHeading = pose.getRotation();
@@ -109,7 +109,7 @@ public class SwerveSubsystem extends SubsystemBase {
     @Override
     public void periodic() {
         refreshModuleMeasurements();
-        currentPose = odometry.update(getHeading(), positions);
+        currentPose = estimator.update(getHeading(), positions);
         applyDriveSetpoint();
         fieldVis.setRobotPose(currentPose);
 

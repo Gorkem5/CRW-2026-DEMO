@@ -86,7 +86,7 @@ public class SwerveJoystickDriveCommand extends Command {
         limitedY = rampTowards(limitedY, y, DriveConstants.MaxAcc_Y, dt);
 
         double omega = calculateOmega(rot);
-        double vx = -limitedX * DriveConstants.MaxLinearSpeedMps;
+        double vx = limitedX * DriveConstants.MaxLinearSpeedMps;
         double vy = -limitedY * DriveConstants.MaxLinearSpeedMps;
 
         ChassisSpeeds speeds = fieldRelative

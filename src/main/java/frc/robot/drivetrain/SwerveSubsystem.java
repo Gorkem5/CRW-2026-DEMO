@@ -12,6 +12,7 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.StructPublisher;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -53,6 +54,7 @@ public class SwerveSubsystem extends SubsystemBase {
     private final SwerveDriveOdometry odometry;
 
     private Pose2d currentPose = new Pose2d();
+    private Rotation2d simHeading = new Rotation2d();
     private ChassisSpeeds driveSetpoint = new ChassisSpeeds();
 
     private double lastSimTimestamp = Timer.getFPGATimestamp();
@@ -82,6 +84,9 @@ public class SwerveSubsystem extends SubsystemBase {
     }
 
     public Rotation2d getHeading() {
+        if (RobotBase.isSimulation()) {
+            return simHeading;
+        }
         return Rotation2d.fromDegrees(-gyro.getFusedHeading());
     }
 
@@ -92,6 +97,9 @@ public class SwerveSubsystem extends SubsystemBase {
     public void resetPose(Pose2d pose) {
         odometry.resetPosition(getHeading(), positions, pose);
         currentPose = pose;
+        if (RobotBase.isSimulation()) {
+            simHeading = pose.getRotation();
+        }
     }
 
     public SwerveModulePosition[] getModulePositions() {
@@ -122,6 +130,8 @@ public class SwerveSubsystem extends SubsystemBase {
             dt = 0.02;
         }
         lastSimTimestamp = now;
+
+        simHeading = Rotation2d.fromRadians(simHeading.getRadians() + driveSetpoint.omegaRadiansPerSecond * dt);
 
         fl.Update(dt);
         fr.Update(dt);

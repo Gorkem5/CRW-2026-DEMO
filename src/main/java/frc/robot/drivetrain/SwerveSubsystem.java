@@ -11,6 +11,10 @@ import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.VecBuilder;
+import edu.wpi.first.math.numbers.N1;
+import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.networktables.StructPublisher;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
@@ -92,6 +96,14 @@ public class SwerveSubsystem extends SubsystemBase {
 
     public Pose2d getPose() {
         return currentPose;
+    }
+
+    public void addVisionMeasurement(Pose2d visionPose, double timestampSeconds, Matrix<N3, N1> visionStdDevs) {
+        estimator.addVisionMeasurement(visionPose, timestampSeconds, visionStdDevs);
+    }
+
+    public void addVisionMeasurement(Pose2d visionPose, double timestampSeconds, double positionStdDevMeters, double rotationStdDevRad) {
+        estimator.addVisionMeasurement(visionPose, timestampSeconds, VecBuilder.fill(positionStdDevMeters, positionStdDevMeters, rotationStdDevRad));
     }
 
     public void resetPose(Pose2d pose) {

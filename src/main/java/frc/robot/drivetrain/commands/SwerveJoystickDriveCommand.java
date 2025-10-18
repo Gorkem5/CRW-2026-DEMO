@@ -131,6 +131,12 @@ public class SwerveJoystickDriveCommand extends Command {
         requestHeadingHold(swerve.getHeading().plus(Rotation2d.fromDegrees(180.0)), true);
     }
 
+    public void setHeadingHoldTarget(Rotation2d targetHeading) {
+        if (headingHoldEnabled) {
+            headingTarget = targetHeading;
+        }
+    }
+
     private double calculateOmega(double rotationInput) {
         if (headingHoldEnabled && Math.abs(rotationInput) > DriveConstants.HeadingHoldCancelThreshold) {
             clearHeadingHold();

@@ -4,6 +4,8 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.apriltag.AprilTagFields;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
@@ -28,10 +30,18 @@ import frc.robot.Constants.SwerveConstants;
 
 public class SwerveSubsystem extends SubsystemBase {
 
-    private final SwerveModule fl = new SwerveModule(SwerveConstants.AngleCANID_FL, SwerveConstants.DriveCANID_FL);
-    private final SwerveModule fr = new SwerveModule(SwerveConstants.AngleCANID_FR, SwerveConstants.DriveCANID_FR);
-    private final SwerveModule bl = new SwerveModule(SwerveConstants.AngleCANID_BL, SwerveConstants.DriveCANID_BL);
-    private final SwerveModule br = new SwerveModule(SwerveConstants.AngleCANID_BR, SwerveConstants.DriveCANID_BR);
+    private final SwerveModule fl = new SwerveModule(
+        SwerveConstants.AngleCANID_FL,
+        SwerveConstants.DriveCANID_FL);
+    private final SwerveModule fr = new SwerveModule(
+        SwerveConstants.AngleCANID_FR,
+        SwerveConstants.DriveCANID_FR);
+    private final SwerveModule bl = new SwerveModule(
+        SwerveConstants.AngleCANID_BL,
+        SwerveConstants.DriveCANID_BL);
+    private final SwerveModule br = new SwerveModule(
+        SwerveConstants.AngleCANID_BR,
+        SwerveConstants.DriveCANID_BR);
 
     private final SwerveDriveKinematics kinematics = new SwerveDriveKinematics(
         new Translation2d(SwerveConstants.HALF_WHEELBASE_METERS, SwerveConstants.HALF_TRACKWIDTH_METERS),
@@ -56,6 +66,8 @@ public class SwerveSubsystem extends SubsystemBase {
     private final SwerveModulePosition[] positions = new SwerveModulePosition[4];
     private final SwerveModuleState[] states = new SwerveModuleState[4];
     private final SwerveDrivePoseEstimator estimator;
+
+    private final Translation2d fieldCenter = computeFieldCenter();
 
     private Pose2d currentPose = new Pose2d();
     private Rotation2d simHeading = new Rotation2d();
@@ -116,6 +128,23 @@ public class SwerveSubsystem extends SubsystemBase {
 
     public SwerveModulePosition[] getModulePositions() {
         return positions.clone();
+    }
+
+    private static Translation2d computeFieldCenter() {
+        try {
+            AprilTagFieldLayout layout = AprilTagFieldLayout.loadField(AprilTagFields.k2025ReefscapeWelded);
+            return new Translation2d(layout.getFieldLength() / 2.0, layout.getFieldWidth() / 2.0);
+        } catch (Exception ex) {
+            return new Translation2d();
+        }
+    }
+
+    public Rotation2d getHeadingToFieldCenter() {
+        Translation2d centerDelta = fieldCenter.minus(currentPose.getTranslation());
+        if (centerDelta.getNorm() < 1e-6) {
+            return currentPose.getRotation();
+        }
+        return new Rotation2d(centerDelta.getX(), centerDelta.getY());
     }
 
     @Override

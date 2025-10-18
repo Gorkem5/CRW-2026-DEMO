@@ -22,6 +22,11 @@ import frc.robot.Constants.SwerveConstants;
 
 public class SwerveModule {
 
+    private static final DCMotor DRIVE_MOTOR_MODEL = DCMotor.getNEO(1);
+    private static final DCMotor TURN_MOTOR_MODEL = DCMotor.getNEO(1);
+    private static final double SIM_TURN_RATE_RAD_PER_SEC = Math.toRadians(720.0);
+    private static final double WHEEL_CIRCUMFERENCE_METERS = Math.PI * SwerveConstants.WHEEL_DIAMETER_METERS;
+
     private final SparkMax angleSpark;
     private final SparkMax driveSpark;
 
@@ -31,6 +36,8 @@ public class SwerveModule {
     private final SparkClosedLoopController angleController;
     private final SparkClosedLoopController driveController;
 
+    private final double angleConvFactor;
+
     private boolean inverted = false;
     private double targetAngleAbsolute = 0.0;
 
@@ -39,30 +46,30 @@ public class SwerveModule {
     private SparkRelativeEncoderSim driveEncoderSim;
     private SparkRelativeEncoderSim turnEncoderSim;
 
-    private double lastDriveVelocityRpm = 0.0;
+    private double lastMotorRpm = 0.0;
     private double simAngleRad = 0.0;
     private double simDriveRotations = 0.0;
 
-    private static final DCMotor DRIVE_MOTOR_MODEL = DCMotor.getNEO(1);
-    private static final DCMotor TURN_MOTOR_MODEL = DCMotor.getNEO(1);
-    private static final double SIM_TURN_RATE_RAD_PER_SEC = Math.toRadians(720.0);
+    public SwerveModule(int angleCANID, int driveCANID) {
+        angleSpark = new SparkMax(angleCANID, MotorType.kBrushless);
+        driveSpark = new SparkMax(driveCANID, MotorType.kBrushless);
 
-    public SwerveModule(int AngleCANID, int DriveCANID) {
-        angleSpark = new SparkMax(AngleCANID, MotorType.kBrushless);
-        driveSpark = new SparkMax(DriveCANID, MotorType.kBrushless);
+        angleConvFactor = (2.0 * Math.PI) / SwerveConstants.GearRatio_Angle;
 
         SparkMaxConfig angleCfg = new SparkMaxConfig();
         SparkMaxConfig driveCfg = new SparkMaxConfig();
 
-        double angleConvFactor = (2.0 * Math.PI) / SwerveConstants.GearRatio_Angle;
-
-        angleCfg.closedLoop.pid(SwerveConstants.AnglePID_P, SwerveConstants.AnglePID_I, SwerveConstants.AnglePID_D);
+        angleCfg.closedLoop.pid(
+            SwerveConstants.AnglePID_P,
+            SwerveConstants.AnglePID_I,
+            SwerveConstants.AnglePID_D);
         angleCfg.closedLoop.outputRange(-0.5, 0.5);
         angleCfg.idleMode(IdleMode.kBrake);
-        angleCfg.encoder.positionConversionFactor(angleConvFactor);
-        angleCfg.encoder.velocityConversionFactor(angleConvFactor);
 
-        driveCfg.closedLoop.pid(SwerveConstants.DrivePID_P, SwerveConstants.DrivePID_I, SwerveConstants.DrivePID_D);
+        driveCfg.closedLoop.pid(
+            SwerveConstants.DrivePID_P,
+            SwerveConstants.DrivePID_I,
+            SwerveConstants.DrivePID_D);
         driveCfg.idleMode(IdleMode.kCoast);
 
         angleSpark.configure(angleCfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
@@ -70,8 +77,11 @@ public class SwerveModule {
 
         angleEncoder = angleSpark.getEncoder();
         driveEncoder = driveSpark.getEncoder();
+
         angleController = angleSpark.getClosedLoopController();
         driveController = driveSpark.getClosedLoopController();
+
+        zeroSteerRelative();
 
         if (RobotBase.isSimulation()) {
             driveSim = new SparkSim(driveSpark, DRIVE_MOTOR_MODEL);
@@ -94,6 +104,26 @@ public class SwerveModule {
         }
     }
 
+    private void zeroSteerRelative() {
+        setModuleAngleReference(0.0);
+    }
+
+    private void setModuleAngleReference(double moduleAngleRad) {
+        targetAngleAbsolute = moduleAngleRad;
+        inverted = false;
+
+        double motorRotations = moduleAngleRad / angleConvFactor;
+        angleEncoder.setPosition(motorRotations);
+
+        if (RobotBase.isSimulation()) {
+            simAngleRad = moduleAngleRad;
+        }
+    }
+
+    public void forceSteerToZero() {
+        zeroSteerRelative();
+    }
+
     private double shortestTo(double currentAngle, double targetAngle) {
         double curNorm = currentAngle % (2.0 * Math.PI);
         if (curNorm < 0) curNorm += 2.0 * Math.PI;
@@ -108,7 +138,11 @@ public class SwerveModule {
     }
 
     public double GetAngle() {
-        return angleEncoder.getPosition();
+        return motorRotationsToModuleRadians(angleEncoder.getPosition());
+    }
+
+    private double motorRotationsToModuleRadians(double motorRotations) {
+        return motorRotations * angleConvFactor;
     }
 
     public void SetTargetAngle(double angDeg, boolean forceForward) {
@@ -127,7 +161,8 @@ public class SwerveModule {
         targetAngleAbsolute = useFlip ? targetWithFlip : targetNoFlip;
         inverted = useFlip;
 
-        angleController.setReference(targetAngleAbsolute, ControlType.kPosition);
+        double motorReference = targetAngleAbsolute / angleConvFactor;
+        angleController.setReference(motorReference, ControlType.kPosition);
     }
 
     public void SetTargetAngle(double angleDegrees) {
@@ -138,27 +173,35 @@ public class SwerveModule {
         SetSpeed(speedMps);
     }
 
+    private static double motorRotationsToMeters(double motorRotations) {
+        return motorRotations * WHEEL_CIRCUMFERENCE_METERS / SwerveConstants.DRIVE_GEAR_RATIO;
+    }
+
+    private static double motorRpmToMetersPerSecond(double motorRpm) {
+        return (motorRpm / 60.0) * WHEEL_CIRCUMFERENCE_METERS / SwerveConstants.DRIVE_GEAR_RATIO;
+    }
+
+    private static double metersPerSecondToMotorRpm(double metersPerSecond) {
+        double wheelRps = metersPerSecond / WHEEL_CIRCUMFERENCE_METERS;
+        double motorRps = wheelRps * SwerveConstants.DRIVE_GEAR_RATIO;
+        return motorRps * 60.0;
+    }
+
     public double GetSpeed() {
-        if (RobotBase.isSimulation()) {
-            return (lastDriveVelocityRpm / 250.0) / SwerveConstants.SpeedCalibValue;
-        }
-        double rpm = driveEncoder.getVelocity();
-        return rpm / 250.0 / SwerveConstants.SpeedCalibValue;
+        double motorRpm = driveEncoder.getVelocity();
+        return motorRpmToMetersPerSecond(motorRpm);
     }
 
     void SetSpeed(double speedMps) {
-        double sign = inverted ? -1.0 : 1.0;
-        double motorVelRef = sign * speedMps * 250.0 * SwerveConstants.SpeedCalibValue;
-        lastDriveVelocityRpm = motorVelRef;
-        driveController.setReference(motorVelRef, ControlType.kVelocity);
+        double commanded = inverted ? -speedMps : speedMps;
+        lastMotorRpm = metersPerSecondToMotorRpm(commanded);
+        driveController.setReference(lastMotorRpm, ControlType.kVelocity);
     }
 
     public void Update(double deltaTimeSeconds) {
         if (!RobotBase.isSimulation()) {
             return;
         }
-
-        double busVoltage = 12.0;
 
         double err = targetAngleAbsolute - simAngleRad;
         err = ((err + Math.PI) % (2.0 * Math.PI));
@@ -170,32 +213,34 @@ public class SwerveModule {
         simAngleRad += step;
         double turnVel = deltaTimeSeconds > 0.0 ? step / deltaTimeSeconds : 0.0;
 
+        double angleRotations = simAngleRad / angleConvFactor;
+        double angleRpm = (turnVel / angleConvFactor) * 60.0;
+
         if (turnSim != null) {
-            turnSim.iterate(turnVel, busVoltage, deltaTimeSeconds);
-            turnSim.setPosition(simAngleRad);
-            turnSim.setVelocity(turnVel);
+            turnSim.setPosition(angleRotations);
+            turnSim.setVelocity(angleRpm);
         }
         if (turnEncoderSim != null) {
-            turnEncoderSim.setPosition(simAngleRad);
-            turnEncoderSim.setVelocity(turnVel);
+            turnEncoderSim.setPosition(angleRotations);
+            turnEncoderSim.setVelocity(angleRpm);
         }
 
-        simDriveRotations += (lastDriveVelocityRpm / 60.0) * deltaTimeSeconds;
+        double motorRotPerSec = lastMotorRpm / 60.0;
+        simDriveRotations += motorRotPerSec * deltaTimeSeconds;
 
         if (driveSim != null) {
-            driveSim.iterate(lastDriveVelocityRpm, busVoltage, deltaTimeSeconds);
             driveSim.setPosition(simDriveRotations);
-            driveSim.setVelocity(lastDriveVelocityRpm);
+            driveSim.setVelocity(lastMotorRpm);
         }
         if (driveEncoderSim != null) {
             driveEncoderSim.setPosition(simDriveRotations);
-            driveEncoderSim.setVelocity(lastDriveVelocityRpm);
+            driveEncoderSim.setVelocity(lastMotorRpm);
         }
     }
 
     public SwerveModulePosition GetPosition() {
-        double rotations = RobotBase.isSimulation() ? simDriveRotations : driveEncoder.getPosition();
-        double distanceMeters = rotations / 250.0 / SwerveConstants.SpeedCalibValue;
+        double motorRotations = driveEncoder.getPosition();
+        double distanceMeters = motorRotationsToMeters(motorRotations);
         return new SwerveModulePosition(distanceMeters, Rotation2d.fromRadians(GetAngle()));
     }
 

@@ -26,8 +26,11 @@ public class RobotContainer {
 
     driver.options().onTrue(Commands.runOnce(driveCommand::toggleFieldRelative));
     driver.square().onTrue(Commands.runOnce(driveCommand::quickFlipHeading));
-    driver.triangle().onTrue(Commands.runOnce(
-        () -> driveCommand.requestHeadingHold(Rotation2d.fromDegrees(0.0), false)));
+    driver.triangle()
+        .whileTrue(
+            Commands.run(() -> driveCommand.setHeadingHoldTarget(swerve.getHeadingToFieldCenter()))
+                .beforeStarting(() -> driveCommand.requestHeadingHold(swerve.getHeadingToFieldCenter(), false))
+                .finallyDo(interrupted -> driveCommand.clearHeadingHold()));
     driver.cross().onTrue(Commands.runOnce(driveCommand::clearHeadingHold));
   }
 
